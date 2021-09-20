@@ -1,0 +1,79 @@
+[
+    {
+        "person": "P1",
+        "section": "A5",
+        "EntryTime": "9/15/2021 3:55:38 PM",
+        "ExitTime": "9/15/2021 3:55:45 PM",
+        "duration": 7.0
+    },
+    {
+        "person": "P1",
+        "section": "A6",
+        "EntryTime": "9/15/2021 3:55:45 PM",
+        "ExitTime": "9/15/2021 3:55:48 PM",
+        "duration": 3.0
+    },
+    {
+        "person": "P1",
+        "section": "A7",
+        "EntryTime": "9/15/2021 3:55:49 PM",
+        "ExitTime": "9/15/2021 3:55:51 PM",
+        "duration": 2.0
+    },
+    {
+        "person": "P1",
+        "section": "A8",
+        "EntryTime": "9/15/2021 3:55:51 PM",
+        "ExitTime": "9/15/2021 3:55:53 PM",
+        "duration": 2.0
+    },
+    {
+        "person": "P1",
+        "section": "A4",
+        "EntryTime": "9/15/2021 3:55:54 PM",
+        "ExitTime": "9/15/2021 3:55:54 PM",
+        "duration": 0.0
+    },
+    {
+        "person": "P1",
+        "section": "A3",
+        "EntryTime": "9/15/2021 3:55:54 PM",
+        "ExitTime": "9/15/2021 3:56:08 PM",
+        "duration": 14.0
+    },
+    {
+        "person": "P1",
+        "section": "A2",
+        "EntryTime": "9/15/2021 3:56:09 PM",
+        "ExitTime": "9/15/2021 3:56:13 PM",
+        "duration": 4.0
+    },
+    {
+        "person": "P1",
+        "section": "A6",
+        "EntryTime": "9/15/2021 3:56:13 PM",
+        "ExitTime": "9/15/2021 3:56:14 PM",
+        "duration": 1.0
+    },
+    {
+        "person": "P1",
+        "section": "A5",
+        "EntryTime": "9/15/2021 3:56:14 PM",
+        "ExitTime": "9/15/2021 3:56:17 PM",
+        "duration": 3.0
+    },
+    {
+        "person": "P1",
+        "section": "A1",
+        "EntryTime": "9/15/2021 3:56:17 PM",
+        "ExitTime": "9/15/2021 3:56:37 PM",
+        "duration": 20.0
+    },
+    {
+        "person": "P1",
+        "section": "A5",
+        "EntryTime": "9/15/2021 3:56:37 PM",
+        "ExitTime": "N/A",
+        "duration": "N/A"
+    }
+]

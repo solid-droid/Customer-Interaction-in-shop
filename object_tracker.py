@@ -1,4 +1,9 @@
 import os
+import math
+from re import S
+import datetime as dt
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesseract.exe'
 # comment out below line to enable tensorflow logging outputs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 import time
@@ -8,6 +13,7 @@ if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
 from absl import app, flags, logging
 from absl.flags import FLAGS
+import json
 import core.utils as utils
 from core.yolov4 import filter_boxes
 from tensorflow.python.saved_model import tag_constants
@@ -37,6 +43,13 @@ flags.DEFINE_float('score', 0.50, 'score threshold')
 flags.DEFINE_boolean('dont_show', False, 'dont show video output')
 flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
 flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
+
+customConfig =  { "columns": 4 ,  "rows" : 2 , "BBox" : [], "segment": {}}
+currentSegments = []
+activeSegmets = {}
+closedSegments = []
+OCRtime = "Not started"
+personList = []
 
 def main(_argv):
     # Definition of the parameters
@@ -81,28 +94,51 @@ def main(_argv):
 
     out = None
 
+    #creating segment logger
+    width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cellWidth = width/customConfig["columns"]
+    cellHeight = height/customConfig["rows"]
+    for y in range(0, customConfig['rows']):
+        for x in range(0, customConfig['columns']):
+            customConfig["BBox"].append({
+                            "xmin": x*cellWidth, 
+                            "ymin": y*cellHeight, 
+                            "xmax": (x+1)*cellWidth, 
+                            "ymax": (y+1)*cellHeight,
+                            "center":[x*cellWidth + cellWidth/2, y*cellHeight + cellHeight/2],
+                            "segment" : str(y)+str(x)
+                        })
+            customConfig["segment"][str(y)+str(x)] = {
+                            "xmin": x*cellWidth, 
+                            "ymin": y*cellHeight, 
+                            "xmax": (x+1)*cellWidth, 
+                            "ymax": (y+1)*cellHeight,
+                            "log": {},
+            }
     # get video ready to save locally if flag is set
     if FLAGS.output:
         # by default VideoCapture returns float instead of int
-        width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = int(vid.get(cv2.CAP_PROP_FPS))
         codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
         out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
 
+
     frame_num = 0
     # while video is running
     while True:
-        return_value, frame = vid.read()
+        return_value, frame = vid.read()      
+        
         if return_value:
+    
+            #frame for deep sort
+            roi = frame[int(height*0.91):height-40, int(width*0.55):width-1]
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            image = Image.fromarray(frame)
         else:
             print('Video has ended or failed, try a different video format!')
             break
         frame_num +=1
-        print('Frame #: ', frame_num)
-        frame_size = frame.shape[:2]
+        # print('Frame #: ', frame_num)
         image_data = cv2.resize(frame, (input_size, input_size))
         image_data = image_data / 255.
         image_data = image_data[np.newaxis, ...].astype(np.float32)
@@ -201,37 +237,147 @@ def main(_argv):
         tracker.update(detections)
 
         # update tracks
+        currentSegments.clear()
         for track in tracker.tracks:
             if not track.is_confirmed() or track.time_since_update > 1:
                 continue 
             bbox = track.to_tlbr()
             class_name = track.get_class()
-            
+        
+            #add to personList
+            try:
+                pos = personList.index(int(track.track_id))+1
+            except:
+                pos = len(personList)+1
+                personList.append(int(track.track_id))
         # draw bbox on screen
             color = colors[int(track.track_id) % len(colors)]
             color = [i * 255 for i in color]
             cv2.rectangle(frame, (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3])), color, 2)
-            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(track.track_id)))*17, int(bbox[1])), color, -1)
-            cv2.putText(frame, class_name + "-" + str(track.track_id),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
+            cv2.rectangle(frame, (int(bbox[0]), int(bbox[1]-30)), (int(bbox[0])+(len(class_name)+len(str(pos)))*17, int(bbox[1])), color, -1)
+            cv2.putText(frame, class_name + "-" + str(pos),(int(bbox[0]), int(bbox[1]-10)),0, 0.75, (255,255,255),2)
+        
+        # adding entries to segment logger
+            distance = []
+
+            for segment in customConfig["BBox"]:
+                center1 = [(int(bbox[0])+int(bbox[2]))/2 , (int(bbox[1])+int(bbox[3]))/2]
+                center2 = segment["center"]
+                distanceX = abs(center1[0] - center2[0])
+                distanceY = abs(center1[1] - center2[1])
+                diagonal = math.sqrt(pow(distanceX,2) + pow(distanceY,2))
+                distance.append([diagonal ,segment["segment"]])
+
+               
+            segmentID = min(distance)[1]
+            box = customConfig["segment"][segmentID]
+            cv2.rectangle(frame, (int(box["xmin"]), int(box["ymin"])), (int(box["xmax"]), int(box["ymax"])), (0,255,0) , 2)
+            cv2.putText(frame,'A'+str(int(segmentID[0]) * customConfig["columns"] + int(segmentID[1]) + 1),
+                (int(box["xmax"]-100), int(box["ymin"]+70)),0, 2, (0,255,0), 5)
+            #Get Time
+            roi = cv2.resize(roi, None, fx=0.5, fy=0.5)
+            roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+            roi = cv2.bitwise_not(roi)
+            ret, roi = cv2.threshold(roi, 70, 255, cv2.THRESH_BINARY)
+
+            config = "--psm 7"
+            OCRtime = pytesseract.image_to_string(roi, config = config)
+            personID = str(pos)
+        #   add to logger
+            currentSegments.append({"id":personID, "segment":segmentID, "time" : OCRtime})
 
         # if enable info flag then print details about each track
             if FLAGS.info:
-                print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(track.track_id), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
+                print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(pos), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
         # calculate frames per second of running detections
         fps = 1.0 / (time.time() - start_time)
-        print("FPS: %.2f" % fps)
+        # print("FPS: %.2f" % fps)
         result = np.asarray(frame)
         result = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
         
-        if not FLAGS.dont_show:
-            cv2.imshow("Output Video", result)
+        #############################################################################
+        #get id of currentsegmet as a list
+        currentList = []
+        for segment in currentSegments:
+            currentList.append(segment["id"])
         
+        #check activeSegments
+        activeList = activeSegmets.keys()
+        newIDs = list(set(currentList).difference(activeList))
+        closedIDs = []
+        # closedIDs = list(set(activeList).difference(currentList))
+        existingIDs = list(set(currentList).intersection(activeList))
+        
+
+        #add new entries to activeSegments
+        for segment in currentSegments:
+            if (segment["id"] in newIDs) :
+                activeSegmets[segment["id"]]= {"segment":segment["segment"], "time":segment["time"]}
+            elif ((segment["id"] in existingIDs) and (segment["segment"] != activeSegmets[segment["id"]]["segment"])):
+                closedIDs.append(segment["id"])
+
+        #remove closed ids
+        for id in closedIDs:
+            currentState = activeSegmets[id]
+            entryTime = currentState["time"][ : -2]
+            exitTime  = OCRtime[ : -2]            
+            closedSegments.append({
+                "person":id,
+                "section":currentState["segment"],
+                "EntryTime":entryTime,
+                "ExitTime":exitTime,
+                "duration": getDuration(entryTime, exitTime)
+                });
+            activeSegmets.pop(id)
+        
+
+
+
+        #########################################################################
+        if not FLAGS.dont_show:
+            reImg = cv2.resize(result, ( 960, 540 ))
+            cv2.imshow("Output Video", reImg)
+        
+
         # if output flag is set, save video file
         if FLAGS.output:
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
+    ###############-end-of-video-#########################
+    for segment in activeSegmets.keys():
+        closedSegments.append({"person":segment, "section":activeSegmets[segment]["segment"], "EntryTime":activeSegmets[segment]["time"][ : -2], "ExitTime":"N/A", "duration":"N/A"})
+        
+    closedSegments2 = list(map(formatLogger, closedSegments))
+
+    with open('logs.json', 'w') as fp:
+        json.dump(closedSegments2 , fp,  indent=4)
     cv2.destroyAllWindows()
+
+personList = []
+
+def getTime(tt):
+    [_date , _time , _type] = tt.split(" ")
+    [month, day, year] = _date.split("/")
+    [hour, minute, second] = _time.split(":")
+    if _type == 'PM':
+        hour = int(hour) + 12
+    return [int(year), int(month), int(day), int(hour), int(minute), int(second)]
+
+def getDuration(start, end):
+    st = getTime(start)
+    et = getTime(end)
+    a = dt.datetime(st[0], st[1], st[2], st[3], st[4], st[5])
+    b = dt.datetime(et[0], et[1], et[2], et[3], et[4], et[5])
+    return (b-a).total_seconds()
+
+
+def formatLogger(item):
+    section = item["section"]  
+    sectionName = 'A'+str(int(section[0]) * customConfig["columns"] + int(section[1]) + 1)
+    return {"person":"P"+item["person"], "section":sectionName, "EntryTime":item["EntryTime"], "ExitTime":item["ExitTime"], "duration":item["duration"]}
+
+
 
 if __name__ == '__main__':
     try:
