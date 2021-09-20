@@ -1,6 +1,12 @@
 ## Customer Interaction With Store Layout
-This is a python project to track multiple people from video and log how long they spent in each segment of a store/shop
+This is a python project to track multiple people from video and log how long they spent in each segment of a store/shop  
 
+## Tools and Algorithms used
+- Python  - language
+- Anaconda - environment
+- YOLOv4 - object detection
+- DeepSort - object tracking
+- Tesseract - ocr
 
 ## Setup your environment
 - use Anaconda (easier to setup)
