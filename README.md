@@ -1,4 +1,14 @@
-# yolov4-deepsort
+## Customer Interaction With Store Layout
+This is a python project to track multiple people from video and log how long they spent in each segment of a store/shop
+
+
+## Setup your environment
+- use Anaconda (easier to setup)
+- follow the below instructions to setup template YOLOv4 (object detection) and DeepSort (object tracking) project 
+- Use GPU based instruction for better results.
+<details>
+ <summary>yolov4-deepsort local environment setup</summary>
+
 [![license](https://img.shields.io/github/license/mashape/apistatus.svg)](LICENSE)
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1zmeSTP3J5zu2d5fHgsQC06DyYEYJFXq1?usp=sharing)
 
@@ -141,3 +151,20 @@ save_model.py:
    Huge shoutout goes to hunglc007 and nwojke for creating the backbones of this repository:
   * [tensorflow-yolov4-tflite](https://github.com/hunglc007/tensorflow-yolov4-tflite)
   * [Deep SORT Repository](https://github.com/nwojke/deep_sort)
+  
+</details>  
+
+- install tesseract(64bit) and pytesseract -> (OCR)
+
+## Run the project
+- open CMD/terminal from the project folder
+- run ```conda init```
+- run ```conda activate yolov4-gpu```
+- To run project with linked video file  
+  ```python object_tracker.py```
+- To run project with custom video file  
+  ```python object_tracker.py --video ./data/video/test.mp4```
+- To run project and output video to a file   
+  ```python object_tracker.py --output ./outputs/demo.avi```
+- To run project with custom video and output to file   
+  ```python object_tracker.py --video ./data/video/test.mp4 --output ./outputs/demo.avi```
