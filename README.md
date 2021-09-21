@@ -7,6 +7,7 @@ This is a python project to track multiple people from video and log how long th
 - YOLOv4 - object detection
 - DeepSort - object tracking
 - Tesseract - ocr
+- TKinter based GUI
 
 ## Setup your environment
 - use Anaconda (easier to setup)
