@@ -3,6 +3,11 @@ import math
 from re import S
 import datetime as dt
 import pytesseract
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import os
+from threading import *
+import webbrowser
 pytesseract.pytesseract.tesseract_cmd = 'C:/Program Files/Tesseract-OCR/tesseract.exe'
 # comment out below line to enable tensorflow logging outputs
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -11,9 +16,10 @@ import tensorflow as tf
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 if len(physical_devices) > 0:
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
-from absl import app, flags, logging
-from absl.flags import FLAGS
+
 import json
+import csv
+
 import core.utils as utils
 from core.yolov4 import filter_boxes
 from tensorflow.python.saved_model import tag_constants
@@ -29,20 +35,7 @@ from deep_sort import preprocessing, nn_matching
 from deep_sort.detection import Detection
 from deep_sort.tracker import Tracker
 from tools import generate_detections as gdet
-flags.DEFINE_string('framework', 'tf', '(tf, tflite, trt')
-flags.DEFINE_string('weights', './checkpoints/yolov4-416',
-                    'path to weights file')
-flags.DEFINE_integer('size', 416, 'resize images to')
-flags.DEFINE_boolean('tiny', False, 'yolo or yolo-tiny')
-flags.DEFINE_string('model', 'yolov4', 'yolov3 or yolov4')
-flags.DEFINE_string('video', './data/video/Part1.mp4', 'path to input video or set to 0 for webcam')
-flags.DEFINE_string('output', None, 'path to output video')
-flags.DEFINE_string('output_format', 'XVID', 'codec used in VideoWriter when saving video to file')
-flags.DEFINE_float('iou', 0.45, 'iou threshold')
-flags.DEFINE_float('score', 0.50, 'score threshold')
-flags.DEFINE_boolean('dont_show', False, 'dont show video output')
-flags.DEFINE_boolean('info', False, 'show detailed info of tracked objects')
-flags.DEFINE_boolean('count', False, 'count objects being tracked on screen')
+
 
 customConfig =  { "columns": 4 ,  "rows" : 2 , "BBox" : [], "segment": {}}
 currentSegments = []
@@ -50,13 +43,27 @@ activeSegmets = {}
 closedSegments = []
 OCRtime = "Not started"
 personList = []
+root = tk.Tk()
+GUI_filePath = tk.StringVar()
+GUI_columns = tk.StringVar()
+GUI_rows = tk.StringVar()
+inp_size = 416
+inp_iou = 0.45
+inp_score = 0.50
+inp_output_format = 'XVID'
+inp_model = 'yolov4'
+inp_output = './output.avi'
+closedSegments2 = []
 
-def main(_argv):
-    # Definition of the parameters
+
+def main(vid):
+    out = None
+    nms_max_overlap = 1.0
+    input_size = 416
+     # Definition of the parameters
     max_cosine_distance = 0.4
     nn_budget = None
-    nms_max_overlap = 1.0
-    
+    print("started")
     # initialize deep sort
     model_filename = 'model_data/mars-small128.pb'
     encoder = gdet.create_box_encoder(model_filename, batch_size=1)
@@ -68,32 +75,11 @@ def main(_argv):
     # load configuration for object detector
     config = ConfigProto()
     config.gpu_options.allow_growth = True
-    session = InteractiveSession(config=config)
-    STRIDES, ANCHORS, NUM_CLASS, XYSCALE = utils.load_config(FLAGS)
-    input_size = FLAGS.size
-    video_path = FLAGS.video
 
-    # load tflite model if flag is set
-    if FLAGS.framework == 'tflite':
-        interpreter = tf.lite.Interpreter(model_path=FLAGS.weights)
-        interpreter.allocate_tensors()
-        input_details = interpreter.get_input_details()
-        output_details = interpreter.get_output_details()
-        print(input_details)
-        print(output_details)
-    # otherwise load standard tensorflow saved model
-    else:
-        saved_model_loaded = tf.saved_model.load(FLAGS.weights, tags=[tag_constants.SERVING])
-        infer = saved_model_loaded.signatures['serving_default']
-
-    # begin video capture
-    try:
-        vid = cv2.VideoCapture(int(video_path))
-    except:
-        vid = cv2.VideoCapture(video_path)
-
-    out = None
-
+    print("loading yolo")
+    #load YOLO model
+    saved_model_loaded = tf.saved_model.load('./checkpoints/yolov4-416', tags=[tag_constants.SERVING])
+    infer = saved_model_loaded.signatures['serving_default']
     #creating segment logger
     width = int(vid.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(vid.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -116,16 +102,17 @@ def main(_argv):
                             "ymax": (y+1)*cellHeight,
                             "log": {},
             }
-    # get video ready to save locally if flag is set
-    if FLAGS.output:
+    # # get video ready to save locally if flag is set
+    if inp_output:
         # by default VideoCapture returns float instead of int
         fps = int(vid.get(cv2.CAP_PROP_FPS))
-        codec = cv2.VideoWriter_fourcc(*FLAGS.output_format)
-        out = cv2.VideoWriter(FLAGS.output, codec, fps, (width, height))
+        codec = cv2.VideoWriter_fourcc(*inp_output_format)
+        out = cv2.VideoWriter(inp_output, codec, fps, (width, height))
 
 
     frame_num = 0
     # while video is running
+    statusMessage.set("Video Processing, In progess")
     while True:
         return_value, frame = vid.read()      
         
@@ -145,23 +132,11 @@ def main(_argv):
         start_time = time.time()
 
         # run detections on tflite if flag is set
-        if FLAGS.framework == 'tflite':
-            interpreter.set_tensor(input_details[0]['index'], image_data)
-            interpreter.invoke()
-            pred = [interpreter.get_tensor(output_details[i]['index']) for i in range(len(output_details))]
-            # run detections using yolov3 if flag is set
-            if FLAGS.model == 'yolov3' and FLAGS.tiny == True:
-                boxes, pred_conf = filter_boxes(pred[1], pred[0], score_threshold=0.25,
-                                                input_shape=tf.constant([input_size, input_size]))
-            else:
-                boxes, pred_conf = filter_boxes(pred[0], pred[1], score_threshold=0.25,
-                                                input_shape=tf.constant([input_size, input_size]))
-        else:
-            batch_data = tf.constant(image_data)
-            pred_bbox = infer(batch_data)
-            for key, value in pred_bbox.items():
-                boxes = value[:, :, 0:4]
-                pred_conf = value[:, :, 4:]
+        batch_data = tf.constant(image_data)
+        pred_bbox = infer(batch_data)
+        for key, value in pred_bbox.items():
+            boxes = value[:, :, 0:4]
+            pred_conf = value[:, :, 4:]
 
         boxes, scores, classes, valid_detections = tf.image.combined_non_max_suppression(
             boxes=tf.reshape(boxes, (tf.shape(boxes)[0], -1, 1, 4)),
@@ -169,8 +144,8 @@ def main(_argv):
                 pred_conf, (tf.shape(pred_conf)[0], -1, tf.shape(pred_conf)[-1])),
             max_output_size_per_class=50,
             max_total_size=50,
-            iou_threshold=FLAGS.iou,
-            score_threshold=FLAGS.score
+            iou_threshold=inp_iou,
+            score_threshold=inp_score
         )
 
         # convert data to numpy arrays and slice out unused elements
@@ -210,9 +185,7 @@ def main(_argv):
                 names.append(class_name)
         names = np.array(names)
         count = len(names)
-        if FLAGS.count:
-            cv2.putText(frame, "Objects being tracked: {}".format(count), (5, 35), cv2.FONT_HERSHEY_COMPLEX_SMALL, 2, (0, 255, 0), 2)
-            print("Objects being tracked: {}".format(count))
+
         # delete detections that are not in allowed_classes
         bboxes = np.delete(bboxes, deleted_indx, axis=0)
         scores = np.delete(scores, deleted_indx, axis=0)
@@ -275,20 +248,20 @@ def main(_argv):
             cv2.putText(frame,'A'+str(int(segmentID[0]) * customConfig["columns"] + int(segmentID[1]) + 1),
                 (int(box["xmax"]-100), int(box["ymin"]+70)),0, 2, (0,255,0), 5)
             #Get Time
-            roi = cv2.resize(roi, None, fx=0.5, fy=0.5)
-            roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
-            roi = cv2.bitwise_not(roi)
-            ret, roi = cv2.threshold(roi, 70, 255, cv2.THRESH_BINARY)
+            NewRoi = cv2.resize(roi, None, fx=0.5, fy=0.5)
+            NewRoi = cv2.cvtColor(NewRoi, cv2.COLOR_BGR2GRAY)
+            NewRoi = cv2.bitwise_not(NewRoi)
+            ret, NewRoi = cv2.threshold(NewRoi, 70, 255, cv2.THRESH_BINARY)
 
             config = "--psm 7"
-            OCRtime = pytesseract.image_to_string(roi, config = config)
+            OCRtime = pytesseract.image_to_string(NewRoi, config = config)
             personID = str(pos)
+
+            if GUI_showOCR.get() == 1:
+                cv2.imshow("OCR of Time", NewRoi)
+
         #   add to logger
             currentSegments.append({"id":personID, "segment":segmentID, "time" : OCRtime})
-
-        # if enable info flag then print details about each track
-            if FLAGS.info:
-                print("Tracker ID: {}, Class: {},  BBox Coords (xmin, ymin, xmax, ymax): {}".format(str(pos), class_name, (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))))
 
         # calculate frames per second of running detections
         fps = 1.0 / (time.time() - start_time)
@@ -321,13 +294,17 @@ def main(_argv):
         for id in closedIDs:
             currentState = activeSegmets[id]
             entryTime = currentState["time"][ : -2]
-            exitTime  = OCRtime[ : -2]            
+            exitTime  = OCRtime[ : -2]   
+            try:
+                dur = getDuration(entryTime, exitTime) 
+            except:
+                dur = "Invalid"   
             closedSegments.append({
                 "person":id,
                 "section":currentState["segment"],
                 "EntryTime":entryTime,
                 "ExitTime":exitTime,
-                "duration": getDuration(entryTime, exitTime)
+                "duration": dur
                 });
             activeSegmets.pop(id)
         
@@ -335,26 +312,26 @@ def main(_argv):
 
 
         #########################################################################
-        if not FLAGS.dont_show:
-            reImg = cv2.resize(result, ( 960, 540 ))
-            cv2.imshow("Output Video", reImg)
+        reImg = cv2.resize(result, ( 960, 540 ))
+        cv2.imshow("Output Video", reImg)
         
 
         # if output flag is set, save video file
-        if FLAGS.output:
+        if inp_output:
             out.write(result)
         if cv2.waitKey(1) & 0xFF == ord('q'): break
+
+        if cv2.getWindowProperty("Output Video", 4) < 1:
+            break
+
     ###############-end-of-video-#########################
     for segment in activeSegmets.keys():
         closedSegments.append({"person":segment, "section":activeSegmets[segment]["segment"], "EntryTime":activeSegmets[segment]["time"][ : -2], "ExitTime":"N/A", "duration":"N/A"})
-        
+    global closedSegments2     
     closedSegments2 = list(map(formatLogger, closedSegments))
 
-    with open('logs.json', 'w') as fp:
-        json.dump(closedSegments2 , fp,  indent=4)
     cv2.destroyAllWindows()
 
-personList = []
 
 def getTime(tt):
     [_date , _time , _type] = tt.split(" ")
@@ -377,10 +354,97 @@ def formatLogger(item):
     sectionName = 'A'+str(int(section[0]) * customConfig["columns"] + int(section[1]) + 1)
     return {"person":"P"+item["person"], "section":sectionName, "EntryTime":item["EntryTime"], "ExitTime":item["ExitTime"], "duration":item["duration"]}
 
+def browseVideo():
+    fln = filedialog.askopenfilename(initialdir = os.getcwd(), title = "Select video file", filetypes = (("video files","*.mp4"),("all files","*.*")))
+    GUI_filePath.set(fln)
 
+
+def beginProcess():
+    if (GUI_filePath.get() != ""):
+        statusMessage.set("Loading ML models, Please Wait...")
+        processButton['state'] = tk.DISABLED
+        customConfig["columns"] = int(GUI_columns.get())
+        customConfig["rows"] = int(GUI_rows.get())
+        vid = cv2.VideoCapture(GUI_filePath.get())
+        global inp_output
+        inp_output =  None if GUI_exportVideo.get() == 0 else './output.avi'
+        main(vid)
+        statusMessage.set("Processing Complete, you can export now.")
+        processButton['state'] = tk.NORMAL
+    else:
+        statusMessage.set("Please load video, before processing")
+
+def beginJSONExport():
+    with open('logs.json', 'w') as fp:
+        json.dump(closedSegments2 , fp,  indent=4)
+
+def beginCSVExport():
+    keys = closedSegments2[0].keys()
+    with open('logs.csv', 'w', newline='')  as output_file:
+        dict_writer = csv.DictWriter(output_file, keys)
+        dict_writer.writeheader()
+        dict_writer.writerows(closedSegments2)
+    
+
+def beginThread():
+    # Call work function
+    t1=Thread(target=beginProcess)
+    t1.daemon = True
+    t1.start()
+
+def callback(url):
+    webbrowser.open_new_tab(url)
+
+def createScreen():
+
+    wrapper1 = tk.LabelFrame(root, text="Load Video")
+    wrapper1.pack(fill="both", expand="yes", padx=2)
+    
+    tk.Entry(wrapper1, textvariable=GUI_filePath).place(x = 5 ,y = 10 , width = 250 , height = 30)
+    tk.Button(wrapper1, text="Browse", command=browseVideo).place(x = 265,y = 10, width = 70) 
+
+
+    wrapper2 = tk.LabelFrame(root, text="Process")
+    wrapper2.pack(fill="both", expand="yes", padx=2, pady=2) 
+    GUI_columns.set("4")
+    GUI_rows.set("2")
+    tk.Label(wrapper2, text = "Columns :").place(x = 5 ,y = 15)  
+    tk.Entry(wrapper2, textvariable=GUI_columns).place(x = 70 ,y = 15 , width = 70 , height = 20)
+    tk.Label(wrapper2, text = "rows :").place(x = 145,y = 15)  
+    tk.Entry(wrapper2, textvariable=GUI_rows).place(x = 185 ,y = 15 , width = 70 , height = 20)
+    global statusMessage 
+    statusMessage = tk.StringVar()
+    tk.Label(wrapper2, textvariable = statusMessage, fg="green").place(x = 5 ,y = 40)
+    global processButton
+    processButton = tk.Button(wrapper2, text="Process", command=beginThread)
+    processButton.place(x = 265,y = 10, width = 70, height=30 )
+
+    wrapper3 = tk.LabelFrame(root, text="Export")
+    wrapper3.pack(fill="both", expand="yes", padx=2, pady=2)
+
+    global GUI_exportVideo
+    global GUI_showOCR
+    GUI_exportVideo = tk.IntVar()
+    GUI_exportVideo.set(1)
+
+    GUI_showOCR = tk.IntVar()
+    GUI_showOCR.set(0)
+    tk.Checkbutton(wrapper3, text="Show OCR", variable=GUI_showOCR).place(x = 5,y = 5)
+    tk.Checkbutton(wrapper3, text="Video Export", variable=GUI_exportVideo).place(x = 5,y = 30)
+    tk.Button(wrapper3, text="Export JSON", command=beginJSONExport).place(x = 130,y = 5)
+    tk.Button(wrapper3, text="Export CSV", command=beginCSVExport).place(x = 230,y = 5)
+
+    link = tk.Label(wrapper3, text="Github-SourceCode",font=('Helveticabold', 10), fg="blue", cursor="hand2")
+    link.place(x = 160 ,y = 40)
+    link.bind("<Button-1>", lambda e: callback("https://github.com/solid-droid/Customer-Interaction-in-shop"))
+
+    
 
 if __name__ == '__main__':
     try:
-        app.run(main)
+        createScreen() 
+        root.title("Customer Interaction Tracker")
+        root.geometry("350x250")
+        root.mainloop()
     except SystemExit:
         pass
