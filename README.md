@@ -164,13 +164,7 @@ save_model.py:
 
 ## Run the project
 - open CMD/terminal from the project folder
-- run ```conda init```
-- run ```conda activate yolov4-gpu```
-- To run project with linked video file  
-  ```python object_tracker.py```
-- To run project with custom video file  
-  ```python object_tracker.py --video ./data/video/test.mp4```
-- To run project and output video to a file   
-  ```python object_tracker.py --output ./outputs/demo.avi```
-- To run project with custom video and output to file   
-  ```python object_tracker.py --video ./data/video/test.mp4 --output ./outputs/demo.avi```
+- ```conda init```
+- ```conda activate yolov4-gpu```
+- ```python object_tracker.py```
+
