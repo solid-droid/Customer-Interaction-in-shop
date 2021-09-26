@@ -365,6 +365,14 @@ def beginProcess():
         processButton['state'] = tk.DISABLED
         customConfig["columns"] = int(GUI_columns.get())
         customConfig["rows"] = int(GUI_rows.get())
+        global currentSegments
+        global activeSegmets
+        global closedSegments
+        global closedSegments2
+        currentSegments = []
+        activeSegmets = {}
+        closedSegments = []
+        closedSegments2 = []
         vid = cv2.VideoCapture(GUI_filePath.get())
         global inp_output
         inp_output =  None if GUI_exportVideo.get() == 0 else './output.avi'
