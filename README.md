@@ -169,4 +169,5 @@ save_model.py:
 - ```conda activate yolov4-gpu```
 - ```python object_tracker.py```
 - (If any package not found error is comming just install it using pip install command)
+- pyinstaller(for standalone) => ```pyinstaller --onefile --windowed CustomerTracker.spec```
 
