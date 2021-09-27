@@ -446,13 +446,7 @@ def createScreen():
     tk.Checkbutton(wrapper3, text="Video Export", variable=GUI_exportVideo).place(x = 5,y = 30)
     tk.Button(wrapper3, text="Export JSON", command=beginJSONExport).place(x = 130,y = 5)
     tk.Button(wrapper3, text="Export CSV", command=beginCSVExport).place(x = 230,y = 5)
-
-    link = tk.Label(wrapper3, text="Github-SourceCode",font=('Helveticabold', 10), fg="blue", cursor="hand2")
-    link.place(x = 160 ,y = 40)
-    link.bind("<Button-1>", lambda e: callback("https://github.com/solid-droid/Customer-Interaction-in-shop"))
-
     
-
 if __name__ == '__main__':
     try:
         createScreen() 
