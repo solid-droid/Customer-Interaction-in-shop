@@ -325,8 +325,13 @@ def main(vid):
             break
 
     ###############-end-of-video-#########################
+    exitTime  = OCRtime[ : -2]  
     for segment in activeSegmets.keys():
-        closedSegments.append({"person":segment, "section":activeSegmets[segment]["segment"], "EntryTime":activeSegmets[segment]["time"][ : -2], "ExitTime":"N/A", "duration":"N/A"})
+        try:
+            dur = getDuration(activeSegmets[segment]["time"][ : -2], exitTime)
+        except:
+            dur = "Invalid"
+        closedSegments.append({"person":segment, "section":activeSegmets[segment]["segment"], "EntryTime":activeSegmets[segment]["time"][ : -2], "ExitTime":exitTime, "duration":dur})
     global closedSegments2     
     closedSegments2 = list(map(formatLogger, closedSegments))
 
